@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="light dark">
+<title>{{.Title}} · Media Organizer</title>
+<link rel="icon" href="{{static "icon.svg"}}" type="image/svg+xml">
+<link rel="stylesheet" href="{{static "app.css"}}">
+<link rel="expect" href="#{{.Head}}" blocking="render">
+<script src="{{static "transitions.js"}}" async blocking="render"></script>
+<script src="{{static "app.js"}}" type="module"></script>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+<header class="site-header">
+  <a class="brand" href="/">{{template "i-logo"}}<span>Media Organizer</span></a>
+  <nav aria-label="Primary">
+    <ul class="nav" role="list">
+      <li><a href="/"{{if eq .Nav "library"}} aria-current="page"{{end}}>Library</a></li>
+      <li><a href="/intake"{{if eq .Nav "intake"}} aria-current="page"{{end}}>Intake</a></li>
+      <li><a href="/following"{{if eq .Nav "following"}} aria-current="page"{{end}}>Following</a></li>
+    </ul>
+  </nav>
+</header>
+<main id="main" tabindex="-1">
+{{template "content" .Data}}
+</main>
+<div class="toasts" role="region" aria-label="Notifications">
+  {{with .Flash}}
+  <div class="toast" id="toast" popover="manual" data-kind="{{.Kind}}">
+    {{if eq .Kind "ok"}}{{template "i-check"}}{{else}}{{template "i-alert"}}{{end}}
+    <p><span class="sr-only">{{if eq .Kind "ok"}}Done:{{else if eq .Kind "warn"}}Warning:{{else}}Error:{{end}}</span> {{.Message}}</p>
+    <button type="button" class="icon-button" popovertarget="toast" popovertargetaction="hide" aria-label="Close notification">{{template "i-x"}}</button>
+  </div>
+  {{end}}
+</div>
+<div class="sr-only" aria-live="polite" id="announcer"></div>
+<dialog id="confirm" class="confirm" closedby="any" aria-labelledby="confirm-title" aria-describedby="confirm-detail">
+  <form method="dialog">
+    <h1 id="confirm-title">Are you sure?</h1>
+    <p id="confirm-detail"></p>
+    <div class="actions">
+      <button class="button" value="cancel" autofocus>Cancel</button>
+      <button class="button danger" value="confirm">Confirm</button>
+    </div>
+  </form>
+</dialog>
+</body>
+</html>

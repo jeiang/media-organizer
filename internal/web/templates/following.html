@@ -1,0 +1,142 @@
+{{define "content"}}
+<header class="page-head" id="page-head">
+  <div>
+    <h1>Following</h1>
+    <p class="lede">New releases of these shows that match a pattern go straight to qBittorrent{{if .Interval}}, checked every {{interval .Interval}}{{end}}.</p>
+  </div>
+  <div class="head-actions">
+    <p class="muted small">Last checked {{ago .Status.LastCheck}}</p>
+    <form method="post" action="/following/check"><button class="button"{{if not .HasQbit}} disabled{{end}}>{{template "i-refresh"}}Check all now</button></form>
+  </div>
+</header>
+
+{{if not .HasQbit}}
+<p class="notice" data-tone="warn" role="status">{{template "i-alert"}}<span><span class="sr-only">Warning:</span> qBittorrent is not configured, so nothing can be added.</span></p>
+{{end}}
+{{range .Status.Errors}}
+<p class="notice" data-tone="warn">{{template "i-alert"}}<span><span class="sr-only">Warning:</span> {{.}}</span></p>
+{{end}}
+{{with .Error}}
+<p class="notice" data-tone="error" role="alert">{{template "i-alert"}}<span><span class="sr-only">Error:</span> {{.}}</span></p>
+{{end}}
+
+<div class="following-grid">
+  <section class="panel" aria-labelledby="follow-title">
+    <h2 id="follow-title">Follow a show</h2>
+    {{if .HasTMDB}}
+    <form class="search-row" role="search" method="get" action="/following">
+      <label class="search grow">
+        {{template "i-search"}}
+        <span class="sr-only">Search TMDB for a show</span>
+        <input type="search" name="q" value="{{.Q}}" placeholder="Search for a show" autocomplete="off">
+      </label>
+      <button class="button">Search</button>
+    </form>
+    {{if .Hits}}
+    <ul class="hits" role="list">
+      {{range .Hits}}
+      <li>
+        <a class="hit" href="/following?pick={{.ID}}">
+          {{if .Poster}}<img src="{{.Poster}}" alt="" width="46" height="69" loading="lazy">{{else}}<span class="hit-blank" aria-hidden="true"></span>{{end}}
+          <span>
+            <strong>{{.Name}}</strong>{{with .Year}} <span class="muted">({{.}})</span>{{end}}
+            {{with .Overview}}<span class="hit-overview">{{.}}</span>{{end}}
+          </span>
+        </a>
+      </li>
+      {{end}}
+    </ul>
+    {{else if .Q}}
+    <p class="muted">No shows found for “{{.Q}}”.</p>
+    {{end}}
+    {{end}}
+
+    <form class="follow-form" method="post" action="/following">
+      {{with .Picked}}
+      <div class="picked">
+        {{if .Poster}}<img src="{{.Poster}}" alt="" width="46" height="69">{{end}}
+        <p><strong>{{.Name}}</strong>{{with .Year}} <span class="muted">({{.}})</span>{{end}}</p>
+      </div>
+      {{end}}
+      <input type="hidden" name="tmdb" value="{{if .Form.TMDBID}}{{.Form.TMDBID}}{{end}}">
+      <div class="field">
+        <label for="name">Name</label>
+        <input id="name" name="name" value="{{.Form.Name}}" required autocomplete="off">
+      </div>
+      <div class="field">
+        <label for="imdb">IMDb ID</label>
+        <p class="hint" id="imdb-hint">“tt” and 7 to 9 digits, from the show’s IMDb address.</p>
+        <input id="imdb" name="imdb" value="{{.Form.IMDB}}" required pattern="(tt)?[0-9]{7,9}" autocomplete="off" aria-describedby="imdb-hint" data-error="imdb-error">
+        <p id="imdb-error" class="error-msg"><span role="img" aria-label="Error">✕</span> Enter an ID like tt0903747.</p>
+      </div>
+      <div class="field">
+        <label for="pattern">Release pattern</label>
+        <p class="hint" id="pattern-hint">A regular expression matched against release names, such as <code>1080p</code> or <code>1080p.*(WEB|AMZN)</code>.</p>
+        <input id="pattern" class="mono" name="pattern" value="{{.Form.Pattern}}" required maxlength="200" autocomplete="off" spellcheck="false" aria-describedby="pattern-hint">
+      </div>
+      <label class="check"><input type="checkbox" name="cs"{{if .Form.CaseSensitive}} checked{{end}}>Case sensitive</label>
+      <div class="actions">
+        <button class="button" formmethod="get" formaction="/following" formnovalidate name="preview" value="1">Preview matches</button>
+        <button class="button primary">Follow</button>
+      </div>
+      <p class="muted small">The first check only notes what already exists; later releases are added.</p>
+    </form>
+
+    {{if .Previewed}}
+    <div class="preview" aria-labelledby="preview-title">
+      <h3 id="preview-title">{{.Matches}} of {{len .Preview}} recent releases match</h3>
+      {{if .Preview}}
+      <ul class="releases" role="list">
+        {{range .Preview}}
+        <li data-match="{{.Match}}">
+          {{if .Match}}{{template "i-check"}}<span class="sr-only">Matches:</span>{{else}}<span class="dot" aria-hidden="true"></span><span class="sr-only">Skipped:</span>{{end}}
+          <span class="release-inline">{{.Title}}</span>
+          {{if .Size}}<span class="size">{{bytes .Size}}</span>{{end}}
+        </li>
+        {{end}}
+      </ul>
+      {{end}}
+    </div>
+    {{end}}
+  </section>
+
+  <section class="panel" aria-labelledby="followed-title">
+    <h2 id="followed-title">Followed</h2>
+    {{if .Channels}}
+    <ul class="channels" role="list">
+      {{range .Channels}}
+      <li class="channel">
+        <div class="channel-text">
+          <p><strong>{{.Name}}</strong> <a class="muted small" href="https://www.imdb.com/title/tt{{.IMDB}}/" rel="noreferrer" target="_blank">tt{{.IMDB}}</a></p>
+          <p class="small"><code>{{.Pattern}}</code>{{if .CaseSensitive}} <span class="muted">· case sensitive</span>{{end}}</p>
+        </div>
+        <span class="badge" data-tone="{{if .Primed}}accent{{else}}honey{{end}}">{{if .Primed}}Watching{{else}}First check pending{{end}}</span>
+        <div class="row-actions">
+          <form method="post" action="/following/{{.ID}}/check"><button class="button quiet"{{if not $.HasQbit}} disabled{{end}}>Check now</button></form>
+          <form method="post" action="/following/{{.ID}}/unfollow" data-confirm="Stop following {{.Name}}?" data-confirm-detail="Releases already sent to qBittorrent stay there." data-confirm-label="Unfollow">
+            <button class="button quiet danger">Unfollow</button>
+          </form>
+        </div>
+      </li>
+      {{end}}
+    </ul>
+    {{else}}
+    <p class="muted">No shows followed yet.</p>
+    {{end}}
+
+    <h2 id="added-title">Recently added</h2>
+    {{if .Added}}
+    <ol class="added" role="list" aria-labelledby="added-title">
+      {{range .Added}}
+      <li>
+        <span class="release-inline">{{.Title}}</span>
+        <span class="muted small">{{.Channel}} · {{if .Size}}{{bytes .Size}} · {{end}}{{ago .Time}}</span>
+      </li>
+      {{end}}
+    </ol>
+    {{else}}
+    <p class="muted">Nothing added yet.</p>
+    {{end}}
+  </section>
+</div>
+{{end}}

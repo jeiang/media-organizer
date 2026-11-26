@@ -1,0 +1,53 @@
+{{define "content"}}
+<header class="page-head" id="page-head">
+  <div>
+    <h1>Library</h1>
+    <p class="lede"><span data-count>{{.Shown}}</span> shown · {{.Movies}} {{if eq .Movies 1}}movie{{else}}movies{{end}} · {{.Shows}} {{if eq .Shows 1}}show{{else}}shows{{end}}</p>
+  </div>
+  <form class="toolbar" role="search" action="/" method="get" data-filter-form>
+    <label class="search">
+      {{template "i-search"}}
+      <span class="sr-only">Search titles</span>
+      <input type="search" name="q" value="{{.Q}}" placeholder="Search titles" autocomplete="off" data-filter>
+    </label>
+    <fieldset class="segmented">
+      <legend class="sr-only">Kind</legend>
+      <label><input type="radio" name="kind" value=""{{if eq .Kind ""}} checked{{end}}>All</label>
+      <label><input type="radio" name="kind" value="movie"{{if eq .Kind "movie"}} checked{{end}}>Movies</label>
+      <label><input type="radio" name="kind" value="show"{{if eq .Kind "show"}} checked{{end}}>Shows</label>
+    </fieldset>
+    <label class="select">
+      <span class="sr-only">Sort by</span>
+      <select name="sort">
+        <option value="recent"{{if eq .Sort "recent"}} selected{{end}}>Recently added</option>
+        <option value="title"{{if eq .Sort "title"}} selected{{end}}>Title</option>
+      </select>
+    </label>
+    <button class="button" type="submit" data-js-hide>Apply</button>
+  </form>
+</header>
+
+{{if .Entries}}
+<ul class="poster-grid" role="list">
+  {{range $i, $e := .Entries}}
+  <li data-title="{{lower $e.Title}}"{{if index $.Hidden $i}} hidden{{end}}>
+    <article class="poster-card">
+      <img src="/art/{{$e.Kind}}/{{pathEscape $e.Dir}}/poster" alt="" width="342" height="513" decoding="async"{{if ge $i 12}} loading="lazy"{{end}}>
+      <h2><a class="card-link" href="/library/{{$e.Kind}}/{{pathEscape $e.Dir}}">{{$e.Title}}</a></h2>
+      <p class="meta">
+        {{with $e.Year}}<span>{{.}}</span>{{end}}
+        {{if eq $e.Kind "show"}}{{$n := len $e.Seasons}}<span>{{$n}} {{if eq $n 1}}season{{else}}seasons{{end}}</span>{{else}}<span>Movie</span>{{end}}
+      </p>
+    </article>
+  </li>
+  {{end}}
+</ul>
+<p class="empty-inline"{{if .Shown}} hidden{{end}} data-filter-empty>No titles match your search.</p>
+{{else}}
+<section class="empty">
+  {{template "i-film"}}
+  <h2>{{if .Total}}Nothing of this kind yet{{else}}The library is empty{{end}}</h2>
+  <p>Filed movies and shows appear here. Start from <a href="/intake">Intake</a>.</p>
+</section>
+{{end}}
+{{end}}

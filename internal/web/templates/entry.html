@@ -1,0 +1,75 @@
+{{define "content"}}
+{{$e := .Entry}}
+{{$base := printf "/stream/%s/%s/" $e.Kind (pathEscape $e.Dir)}}
+<article class="entry">
+  <header class="hero" id="page-head">
+    {{if .Meta.Backdrop}}<img class="hero-backdrop" src="/art/{{$e.Kind}}/{{pathEscape $e.Dir}}/backdrop" alt="">{{end}}
+    <img class="hero-poster" src="/art/{{$e.Kind}}/{{pathEscape $e.Dir}}/poster" alt="" width="342" height="513" fetchpriority="high">
+    <div class="hero-text">
+      <p class="crumb"><a href="/?kind={{$e.Kind}}">{{template "i-back"}}{{if eq $e.Kind "show"}}Shows{{else}}Movies{{end}}</a></p>
+      <h1>{{$e.Title}}</h1>
+      <ul class="facts" role="list">
+        {{with $e.Year}}<li>{{.}}</li>{{end}}
+        {{if eq $e.Kind "show"}}
+          {{$n := len .Seasons}}<li>{{$n}} {{if eq $n 1}}season{{else}}seasons{{end}}</li>
+          <li>{{len $e.Files}} {{if eq (len $e.Files) 1}}episode{{else}}episodes{{end}}</li>
+        {{else}}<li>Movie</li>{{end}}
+        <li>{{bytes $e.Size}}</li>
+      </ul>
+      {{with .Meta.Overview}}<p class="overview">{{.}}</p>{{end}}
+      {{with index $e.Files 0}}
+      <p class="actions">
+        <a class="button primary" href="{{$base}}{{.Rel}}" data-play data-title="{{$e.Title}}{{if .Episode}} · S{{pad .Season}}E{{pad .Episode}}{{end}}">{{template "i-play"}}{{if eq $e.Kind "show"}}Play first episode{{else}}Play{{end}}</a>
+      </p>
+      {{end}}
+    </div>
+  </header>
+
+  {{if eq $e.Kind "show"}}
+    {{range .Seasons}}
+    <section class="season" aria-labelledby="season-{{.Number}}">
+      <h2 id="season-{{.Number}}">{{if .Number}}Season {{.Number}}{{else}}Specials{{end}}</h2>
+      <ol class="files" role="list">
+        {{range .Files}}
+        <li class="file-row">
+          <span class="ep">{{if .Episode}}E{{pad .Episode}}{{else}}—{{end}}</span>
+          <span class="file-name">{{.Name}}</span>
+          <span class="size">{{bytes .Size}}</span>
+          <span class="row-actions">
+            <a class="button quiet" href="{{$base}}{{.Rel}}" data-play data-title="{{$e.Title}} · S{{pad .Season}}E{{pad .Episode}}">{{template "i-play"}}<span>Play<span class="sr-only"> {{.Name}}</span></span></a>
+            <a class="icon-button" href="{{$base}}{{.Rel}}?download" download aria-label="Download {{.Name}}">{{template "i-download"}}</a>
+          </span>
+        </li>
+        {{end}}
+      </ol>
+    </section>
+    {{end}}
+  {{else}}
+    <section class="season" aria-labelledby="files-title">
+      <h2 id="files-title">{{if eq (len $e.Files) 1}}File{{else}}Files{{end}}</h2>
+      <ol class="files" role="list">
+        {{range $e.Files}}
+        <li class="file-row">
+          <span class="ep">{{template "i-film"}}</span>
+          <span class="file-name">{{.Rel}}</span>
+          <span class="size">{{bytes .Size}}</span>
+          <span class="row-actions">
+            <a class="button quiet" href="{{$base}}{{.Rel}}" data-play data-title="{{$e.Title}}">{{template "i-play"}}<span>Play<span class="sr-only"> {{.Rel}}</span></span></a>
+            <a class="icon-button" href="{{$base}}{{.Rel}}?download" download aria-label="Download {{.Rel}}">{{template "i-download"}}</a>
+          </span>
+        </li>
+        {{end}}
+      </ol>
+    </section>
+  {{end}}
+</article>
+
+<dialog id="player" class="player" closedby="any" aria-labelledby="player-title">
+  <header>
+    <h1 id="player-title">Now playing</h1>
+    <form method="dialog"><button class="icon-button" aria-label="Close player">{{template "i-x"}}</button></form>
+  </header>
+  <video controls playsinline preload="metadata"></video>
+  <p class="player-note">Nothing playing? This browser may not decode the file’s format. Use the download button and a desktop player instead.</p>
+</dialog>
+{{end}}

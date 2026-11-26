@@ -1,0 +1,85 @@
+{{define "content"}}
+<header class="page-head" id="page-head">
+  <div>
+    <h1>Intake</h1>
+    <p class="lede">{{if .Qbit}}Finished downloads tagged <code>{{.Tag}}</code>{{if .Import}} and anything in the import folder{{end}}{{else}}Anything in the import folder{{end}}, ready to file into the library.</p>
+  </div>
+</header>
+
+{{range .Problems}}
+<p class="notice" data-tone="warn" role="status">{{template "i-alert"}}<span><span class="sr-only">Warning:</span> {{.}}</span></p>
+{{end}}
+
+{{if .Plans}}
+<ul class="intake-grid" role="list">
+  {{range .Plans}}
+  {{$id := pathEscape .Item.ID}}
+  <li>
+    <article class="intake-card"{{if .Error}} data-state="error"{{end}}>
+      <header>
+        <p class="badges">
+          <span class="badge" data-tone="{{if .Item.Torrent}}accent{{else}}honey{{end}}">{{if .Item.Torrent}}Download{{else}}Import{{end}}</span>
+          <span>{{bytes .Item.Size}}</span>
+          <span>{{len .Item.Videos}} {{if eq (len .Item.Videos) 1}}video{{else}}videos{{end}}</span>
+          {{with .Item.Subs}}<span>{{len .}} {{if eq (len .) 1}}subtitle{{else}}subtitles{{end}}</span>{{end}}
+        </p>
+        <h2 class="release"><a href="/intake/{{$id}}">{{.Item.Name}}</a></h2>
+      </header>
+      {{if .Error}}
+      <p class="notice" data-tone="error">{{template "i-alert"}}<span><span class="sr-only">Error:</span> {{.Error}}</span></p>
+      {{else}}
+      <div class="plan-summary">
+        <p class="plan-as">{{if eq .Edit.Kind "show"}}{{template "i-tv"}}{{else}}{{template "i-film"}}{{end}}<strong>{{.Edit.Title}}</strong>{{with .Edit.Year}}<span class="muted">{{.}}</span>{{end}}</p>
+        {{$files := placed .Files}}
+        <ul class="dests" role="list">
+          {{range $i, $f := $files}}{{if lt $i 3}}<li>{{template "i-arrow"}}<code>{{$f.Dest}}</code></li>{{end}}{{end}}
+        </ul>
+        {{if gt (len $files) 3}}<p class="muted small">and {{sub (len $files) 3}} more</p>{{end}}
+      </div>
+      {{end}}
+      <footer>
+        <form method="post" action="/intake/{{$id}}/file"><button class="button primary"{{if .Error}} disabled{{end}}>File</button></form>
+        <a class="button" href="/intake/{{$id}}">Review</a>
+        {{if .Item.Torrent}}
+        <form method="post" action="/intake/{{$id}}/ignore" data-confirm="Ignore this download?" data-confirm-detail="It stays in qBittorrent but leaves intake." data-confirm-label="Ignore">
+          <button class="button quiet">Ignore</button>
+        </form>
+        {{end}}
+      </footer>
+    </article>
+  </li>
+  {{end}}
+</ul>
+{{else}}
+<section class="empty">
+  {{template "i-inbox"}}
+  <h2>Nothing waiting</h2>
+  <p>{{if .Qbit}}Finished downloads tagged <code>{{.Tag}}</code> appear here{{if .Import}}, and so does anything dropped into <code>{{.Import}}</code>{{end}}.{{else}}Drop files into <code>{{.Import}}</code> and they appear here.{{end}}</p>
+</section>
+{{end}}
+
+<section class="history" aria-labelledby="recent-title">
+  <h2 id="recent-title">Recently filed</h2>
+  {{if .Receipts}}
+  <ol class="receipts" role="list">
+    {{range .Receipts}}
+    <li{{if .UndoneAt}} data-undone{{end}}>
+      <div class="receipt-text">
+        <p><strong>{{.Title}}</strong>{{with .Year}} <span class="muted">({{.}})</span>{{end}}</p>
+        <p class="muted small">{{len .Placed}} {{if eq (len .Placed) 1}}file{{else}}files{{end}} · {{if .Torrent}}hardlinked{{else}}moved{{end}} · {{ago .Time}} · <span class="release-inline">{{.Name}}</span></p>
+      </div>
+      {{if .UndoneAt}}
+      <span class="badge">Undone</span>
+      {{else}}
+      <form method="post" action="/filings/{{.ID}}/undo" data-confirm="Undo filing {{.Title}}?" data-confirm-detail="{{if .Torrent}}The library links are removed; the download is untouched.{{else}}The files move back to the import folder.{{end}}" data-confirm-label="Undo">
+        <button class="button quiet">Undo</button>
+      </form>
+      {{end}}
+    </li>
+    {{end}}
+  </ol>
+  {{else}}
+  <p class="muted">Nothing filed yet.</p>
+  {{end}}
+</section>
+{{end}}
