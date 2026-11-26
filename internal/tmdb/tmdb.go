@@ -4,6 +4,7 @@ package tmdb
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -17,7 +18,7 @@ const (
 	DefaultImages = "https://image.tmdb.org/t/p/"
 )
 
-// Client uses a TMDB API read access token.
+// Client uses a TMDB v4 API read access token or a v3 API key.
 type Client struct {
 	Token  string
 	API    string
@@ -57,6 +58,14 @@ func cmpOr(a, b string) string {
 }
 
 func (c *Client) get(ctx context.Context, path string, q url.Values, out any) error {
+	bearer := strings.Contains(c.Token, ".") // v4 read access tokens are JWTs; v3 keys are hex
+	if !bearer {
+		v := url.Values{"api_key": {c.Token}}
+		for k, x := range q {
+			v[k] = x
+		}
+		q = v
+	}
 	target := strings.TrimRight(c.API, "/") + "/" + path
 	if len(q) > 0 {
 		target += "?" + q.Encode()
@@ -65,10 +74,16 @@ func (c *Client) get(ctx context.Context, path string, q url.Values, out any) er
 	if err != nil {
 		return err
 	}
-	req.Header.Set("Authorization", "Bearer "+c.Token)
+	if bearer {
+		req.Header.Set("Authorization", "Bearer "+c.Token)
+	}
 	req.Header.Set("Accept", "application/json")
 	res, err := c.HTTP.Do(req)
 	if err != nil {
+		var ue *url.Error
+		if errors.As(err, &ue) {
+			err = ue.Err // its message holds the URL, which may hold the API key
+		}
 		return fmt.Errorf("TMDB unreachable: %w", err)
 	}
 	defer res.Body.Close()

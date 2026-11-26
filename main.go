@@ -54,7 +54,7 @@ func run() error {
 		qbitURL      = flag.String("qbittorrent-url", "", "qBittorrent Web UI URL; empty disables downloads and following")
 		qbitKeyFile  = flag.String("qbittorrent-key-file", "", "file holding the qBittorrent API key")
 		tag          = flag.String("tag", "media", "qBittorrent tag that marks media torrents")
-		tmdbFile     = flag.String("tmdb-token-file", "", "file holding a TMDB API read access token; empty disables artwork")
+		tmdbFile     = flag.String("tmdb-token-file", "", "file holding a TMDB read access token or API key; empty disables artwork")
 		eztvURL      = flag.String("eztv-url", "https://eztvx.to/api/get-torrents", "EZTV API endpoint")
 		pollInterval = flag.Duration("poll-interval", 30*time.Minute, "how often to check followed shows; 0 disables")
 		removeSeeded = flag.Bool("remove-seeded", false, "delete filed torrents (and their download copy) once qBittorrent stops seeding them")

@@ -97,7 +97,7 @@ in {
     tmdbTokenFile = mkOption {
       type = types.nullOr types.str;
       default = null;
-      description = "File holding a TMDB API read access token, for posters, overviews, and show search.";
+      description = "File holding a TMDB read access token or API key, for posters, overviews, and show search.";
     };
 
     eztvUrl = mkOption {
