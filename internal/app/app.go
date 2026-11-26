@@ -268,7 +268,7 @@ func (a *App) File(ctx context.Context, id string, edit *library.Edit) (library.
 			errs = append(errs, fmt.Errorf("could not tag the torrent as filed: %w", err))
 		}
 	} else {
-		_ = os.Remove(filepath.Join(item.Root, item.Top)) // only an empty directory goes
+		_ = library.RemoveEmptyDir(filepath.Join(item.Root, item.Top))
 	}
 	return r, errors.Join(errs...)
 }
@@ -302,7 +302,20 @@ func (a *App) Undo(ctx context.Context, id string) (library.Receipt, error) {
 	if !found {
 		return r, ErrNotFound
 	}
+	if r.UndoneAt != nil {
+		return r, fmt.Errorf("%w: already undone", library.ErrUndo)
+	}
+	// Untag first: a sweep deletes filed downloads, and after undo the download is the only copy.
+	untagged := r.Torrent && a.Qbit != nil
+	if untagged {
+		if err := a.Qbit.RemoveTags(ctx, r.Hash, TagFiled); err != nil {
+			return r, fmt.Errorf("could not untag the torrent, so nothing was changed: %w", err)
+		}
+	}
 	if err := library.Undo(r); err != nil {
+		if untagged {
+			err = errors.Join(err, a.Qbit.AddTags(ctx, r.Hash, TagFiled))
+		}
 		return r, err
 	}
 	a.invalidate()
@@ -314,10 +327,20 @@ func (a *App) Undo(ctx context.Context, id string) (library.Receipt, error) {
 		}
 		return nil
 	})
-	if r.Torrent && a.Qbit != nil {
-		err = errors.Join(err, a.Qbit.RemoveTags(ctx, r.Hash, TagFiled))
-	}
 	return r, err
+}
+
+// filedHashes are the torrents with a filing that has not been undone.
+func (a *App) filedHashes() map[string]bool {
+	out := map[string]bool{}
+	a.Store.View(func(s *store.State) {
+		for _, r := range s.Receipts {
+			if r.Torrent && r.UndoneAt == nil {
+				out[r.Hash] = true
+			}
+		}
+	})
+	return out
 }
 
 // Run performs the background jobs until ctx ends.
@@ -406,14 +429,18 @@ func (a *App) selectOne(ctx context.Context, t qbit.Torrent) error {
 }
 
 // Sweep deletes filed torrents that finished seeding. The library keeps its hardlinks.
+// Only torrents with a standing receipt go, and filing and undo wait for the sweep.
 func (a *App) Sweep(ctx context.Context) error {
+	a.fileMu.Lock()
+	defer a.fileMu.Unlock()
 	torrents, err := a.Qbit.Torrents(ctx, "completed", a.Cfg.Tag)
 	if err != nil {
 		return err
 	}
+	filed := a.filedHashes()
 	var errs []error
 	for _, t := range torrents {
-		if !t.HasTag(a.Cfg.Tag) || !t.HasTag(TagFiled) || t.State != qbit.StoppedUP {
+		if !t.HasTag(a.Cfg.Tag) || !t.HasTag(TagFiled) || t.State != qbit.StoppedUP || !filed[t.Hash] {
 			continue
 		}
 		if err := a.Qbit.Delete(ctx, t.Hash, true); err != nil {

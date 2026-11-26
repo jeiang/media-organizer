@@ -134,7 +134,7 @@ func rollback(r *Receipt) {
 
 func removeEmpty(dirs []string) {
 	for i := len(dirs) - 1; i >= 0; i-- {
-		_ = os.Remove(dirs[i]) // fails, as it should, when the directory is not empty
+		_ = RemoveEmptyDir(dirs[i])
 	}
 }
 
