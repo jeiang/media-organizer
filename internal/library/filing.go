@@ -72,18 +72,12 @@ func Execute(p Plan, mode string) (Receipt, error) {
 	return r, nil
 }
 
+// place never replaces an existing destination, so a racing file is never overwritten.
 func place(src, dst, mode string) error {
-	// link(2) never replaces an existing name, so a racing file is never overwritten.
-	if err := os.Link(src, dst); err != nil {
-		return err
-	}
 	if mode == ModeMove {
-		if err := os.Remove(src); err != nil {
-			_ = os.Remove(dst)
-			return err
-		}
+		return renameNoReplace(src, dst)
 	}
-	return nil
+	return os.Link(src, dst)
 }
 
 func linkError(err error) error {
@@ -201,10 +195,7 @@ func reverse(p Placed) error {
 		if _, err := mkdirs(filepath.Dir(p.Src)); err != nil {
 			return err
 		}
-		if err := os.Link(p.Dst, p.Src); err != nil {
-			return err
-		}
-		return os.Remove(p.Dst)
+		return renameNoReplace(p.Dst, p.Src)
 	}
 	return nil
 }
