@@ -58,8 +58,9 @@ type App struct {
 	cat   []library.Entry
 	catAt time.Time
 
-	fileMu sync.Mutex
-	art    artCache
+	fileMu   sync.Mutex
+	art      artCache
+	releases releasesCache
 }
 
 // ErrNotFound is a missing entry, item, receipt, or channel.
@@ -240,6 +241,10 @@ func (a *App) Plan(item library.Item, edit *library.Edit) library.Plan {
 // File files an item. A returned receipt with an error means the files were placed but a
 // follow-up step failed.
 func (a *App) File(ctx context.Context, id string, edit *library.Edit) (library.Receipt, error) {
+	return a.file(ctx, id, edit, false)
+}
+
+func (a *App) file(ctx context.Context, id string, edit *library.Edit, auto bool) (library.Receipt, error) {
 	a.fileMu.Lock()
 	defer a.fileMu.Unlock()
 	item, err := a.Item(ctx, id)
@@ -254,7 +259,7 @@ func (a *App) File(ctx context.Context, id string, edit *library.Edit) (library.
 	if err != nil {
 		return library.Receipt{}, err
 	}
-	r.ID = newID()
+	r.ID, r.Auto = newID(), auto
 	a.invalidate()
 	var errs []error
 	if err := a.Store.Update(func(s *store.State) error {
@@ -360,6 +365,12 @@ func (a *App) Run(ctx context.Context) {
 		if a.Qbit != nil {
 			if err := a.SelectFiles(ctx); err != nil {
 				a.Log.Warn("select files", "error", err)
+			}
+			if err := a.AutoFile(ctx); err != nil {
+				a.Log.Warn("auto file", "error", err)
+			}
+			if err := a.pruneApprovals(ctx); err != nil {
+				a.Log.Warn("prune approvals", "error", err)
 			}
 			if a.Cfg.RemoveSeeded {
 				if err := a.Sweep(ctx); err != nil {

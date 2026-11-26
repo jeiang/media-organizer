@@ -51,7 +51,9 @@
     {{end}}
     {{end}}
 
-    <form class="follow-form" method="post" action="/following">
+    <form class="follow-form" method="post" action="/following"
+      hx-get="/following" hx-vals='{"preview": "1"}' hx-select="#preview-body" hx-target="#preview-body" hx-swap="outerHTML" hx-sync="this:replace"
+      hx-trigger="load, input changed delay:300ms from:#pattern, input changed delay:500ms from:#imdb, change from:#cs">
       {{with .Picked}}
       <div class="picked">
         {{if .Poster}}<img src="{{.Poster}}" alt="" width="46" height="69">{{end}}
@@ -72,32 +74,42 @@
       <div class="field">
         <label for="pattern">Release pattern</label>
         <p class="hint" id="pattern-hint">A regular expression matched against release names, such as <code>1080p</code> or <code>1080p.*(WEB|AMZN)</code>.</p>
-        <input id="pattern" class="mono" name="pattern" value="{{.Form.Pattern}}" required maxlength="200" autocomplete="off" spellcheck="false" aria-describedby="pattern-hint">
+        <input id="pattern" class="mono" name="pattern" value="{{.Form.Pattern}}" required maxlength="200" autocomplete="off" spellcheck="false" aria-describedby="pattern-hint" aria-controls="preview-body">
       </div>
-      <label class="check"><input type="checkbox" name="cs"{{if .Form.CaseSensitive}} checked{{end}}>Case sensitive</label>
+      <label class="check"><input type="checkbox" id="cs" name="cs"{{if .Form.CaseSensitive}} checked{{end}}>Case sensitive</label>
       <div class="actions">
-        <button class="button" formmethod="get" formaction="/following" formnovalidate name="preview" value="1">Preview matches</button>
+        <button class="button" formmethod="get" formaction="/following" formnovalidate name="preview" value="1" data-js-hide>Preview matches</button>
         <button class="button primary">Follow</button>
       </div>
       <p class="muted small">The first check only notes what already exists; later releases are added.</p>
     </form>
 
-    {{if .Previewed}}
     <div class="preview" aria-labelledby="preview-title">
-      <h3 id="preview-title">{{.Matches}} of {{len .Preview}} recent releases match</h3>
-      {{if .Preview}}
-      <ul class="releases" role="list">
-        {{range .Preview}}
-        <li data-match="{{.Match}}">
-          {{if .Match}}{{template "i-check"}}<span class="sr-only">Matches:</span>{{else}}<span class="dot" aria-hidden="true"></span><span class="sr-only">Skipped:</span>{{end}}
-          <span class="release-inline">{{.Title}}</span>
-          {{if .Size}}<span class="size">{{bytes .Size}}</span>{{end}}
-        </li>
+      <h3 id="preview-title" class="eyebrow">Live preview</h3>
+      <p class="sr-only" role="status" id="preview-status"></p>
+      <div id="preview-body" data-summary="{{if and .Previewed (not .PreviewError) .Preview}}{{.Matches}} of {{len .Preview}} recent releases match{{end}}">
+        {{if not .Previewed}}
+        <p class="muted small">Matches appear here as you type.</p>
+        {{else if not .Form.IMDB}}
+        <p class="muted small">Enter an IMDb ID to see which recent releases the pattern takes.</p>
+        {{else if .PreviewError}}
+        <p class="notice" data-tone="error">{{template "i-alert"}}<span><span class="sr-only">Error:</span> {{.PreviewError}}</span></p>
+        {{else if .Preview}}
+        <p class="preview-count"><strong>{{.Matches}}</strong> of {{len .Preview}} recent releases match</p>
+        <ul class="releases" role="list">
+          {{range .Preview}}
+          <li data-match="{{.Match}}">
+            {{if .Match}}{{template "i-check"}}<span class="sr-only">Matches:</span>{{else}}<span class="dot" aria-hidden="true"></span><span class="sr-only">Skipped:</span>{{end}}
+            <span class="release-inline">{{.Before}}{{if .Match}}<mark>{{.Hit}}</mark>{{.After}}{{end}}</span>
+            {{if .Size}}<span class="size">{{bytes .Size}}</span>{{end}}
+          </li>
+          {{end}}
+        </ul>
+        {{else}}
+        <p class="muted small">EZTV lists no releases for this ID.</p>
         {{end}}
-      </ul>
-      {{end}}
+      </div>
     </div>
-    {{end}}
   </section>
 
   <section class="panel" aria-labelledby="followed-title">

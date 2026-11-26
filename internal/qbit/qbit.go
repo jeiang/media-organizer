@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"mime/multipart"
 	"net/http"
 	"net/url"
 	"slices"
@@ -41,6 +42,8 @@ type Torrent struct {
 	Size        int64   `json:"size"`
 	AddedOn     int64   `json:"added_on"`
 	CompletedOn int64   `json:"completion_on"`
+	DLSpeed     int64   `json:"dlspeed"`
+	ETA         int64   `json:"eta"`
 }
 
 // HasTag reports whether the torrent carries tag.
@@ -74,20 +77,23 @@ func (e *Error) Error() string {
 }
 
 func (c *Client) do(ctx context.Context, method, path string, query, form url.Values, out any) error {
+	if form == nil {
+		return c.send(ctx, method, path, query, nil, "", out)
+	}
+	return c.send(ctx, method, path, query, strings.NewReader(form.Encode()), "application/x-www-form-urlencoded", out)
+}
+
+func (c *Client) send(ctx context.Context, method, path string, query url.Values, body io.Reader, contentType string, out any) error {
 	target := strings.TrimRight(c.Base, "/") + "/api/v2/" + path
 	if len(query) > 0 {
 		target += "?" + query.Encode()
-	}
-	var body io.Reader
-	if form != nil {
-		body = strings.NewReader(form.Encode())
 	}
 	req, err := http.NewRequestWithContext(ctx, method, target, body)
 	if err != nil {
 		return &Error{Path: path, Err: err}
 	}
-	if form != nil {
-		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	if contentType != "" {
+		req.Header.Set("Content-Type", contentType)
 	}
 	if c.Key != "" {
 		req.Header.Set("Authorization", "Bearer "+c.Key)
@@ -140,6 +146,26 @@ func (c *Client) Files(ctx context.Context, hash string) ([]File, error) {
 // AddMagnet adds a magnet link with tags.
 func (c *Client) AddMagnet(ctx context.Context, magnet, tags string) error {
 	return c.do(ctx, http.MethodPost, "torrents/add", nil, url.Values{"urls": {magnet}, "tags": {tags}}, nil)
+}
+
+// AddFile uploads a .torrent file with tags.
+func (c *Client) AddFile(ctx context.Context, name string, data []byte, tags string) error {
+	var buf strings.Builder
+	w := multipart.NewWriter(&buf)
+	part, err := w.CreateFormFile("torrents", name)
+	if err == nil {
+		_, err = part.Write(data)
+	}
+	if err == nil {
+		err = w.WriteField("tags", tags)
+	}
+	if err == nil {
+		err = w.Close()
+	}
+	if err != nil {
+		return err
+	}
+	return c.send(ctx, http.MethodPost, "torrents/add", nil, strings.NewReader(buf.String()), w.FormDataContentType(), nil)
 }
 
 // AddTags tags a torrent.

@@ -1,0 +1,68 @@
+{{define "content"}}
+<header class="page-head" id="page-head">
+  <div>
+    <h1>Downloads</h1>
+    <p class="lede">Add a magnet link or a <code>.torrent</code> file. Finished downloads with a clear name are filed into the library on their own; the rest wait in <a href="/intake">Intake</a>.</p>
+  </div>
+</header>
+
+{{if not .HasQbit}}
+<p class="notice" data-tone="warn" role="status">{{template "i-alert"}}<span><span class="sr-only">Warning:</span> qBittorrent is not configured, so nothing can be added.</span></p>
+{{else}}
+<form class="add-torrent panel" method="post" action="/downloads" enctype="multipart/form-data">
+  <div class="field grow">
+    <label for="magnet">Magnet link</label>
+    <div class="input-icon">
+      {{template "i-magnet"}}
+      <input id="magnet" name="magnet" type="text" inputmode="url" placeholder="magnet:?xt=urn:btih:…" autocomplete="off" spellcheck="false" pattern="\s*[Mm][Aa][Gg][Nn][Ee][Tt]:\?.*" aria-describedby="magnet-error" data-error="magnet-error">
+    </div>
+    <p id="magnet-error" class="error-msg"><span role="img" aria-label="Error">✕</span> A magnet link starts with “magnet:?”.</p>
+  </div>
+  <p class="or" aria-hidden="true">or</p>
+  <div class="field">
+    <span class="label" id="torrent-label">Torrent file</span>
+    <label class="file-pick button">
+      {{template "i-upload"}}<span data-file-name>Choose .torrent</span>
+      <input class="sr-only" type="file" name="torrent" accept=".torrent,application/x-bittorrent" aria-labelledby="torrent-label">
+    </label>
+  </div>
+  <button class="button primary add-button">Add</button>
+</form>
+
+{{with .Error}}
+<p class="notice" data-tone="error" role="alert">{{template "i-alert"}}<span><span class="sr-only">Error:</span> {{.}}</span></p>
+{{end}}
+
+<section id="downloads-list" class="downloads" aria-labelledby="list-title"
+  hx-get="/downloads" hx-select="#downloads-list" hx-target="this" hx-swap="outerHTML" hx-trigger="every 4s [document.visibilityState === 'visible']">
+  <h2 id="list-title">Tagged <code>{{.Tag}}</code> <span class="count">{{len .Downloads}}</span></h2>
+  {{if .Downloads}}
+  <ul class="download-list" role="list">
+    {{range .Downloads}}
+    <li class="download" data-tone="{{.Tone}}">
+      <div class="download-main">
+        <p class="release">{{.Name}}</p>
+        <p class="download-meta">
+          <span class="badge" data-tone="{{.Tone}}">{{.Status}}</span>
+          <span>{{bytes .Size}}</span>
+          {{if lt .Progress 1.0}}{{if gt .DLSpeed 0}}<span>{{bytes .DLSpeed}}/s</span>{{end}}{{with eta .ETA}}<span>{{.}} left</span>{{end}}{{end}}
+          {{if .Approved}}{{if .Note}}<span class="note">Needs review: {{.Note}}</span>{{else}}<span class="auto">{{template "i-bolt"}}Files automatically</span>{{end}}{{end}}
+        </p>
+      </div>
+      <div class="download-progress">
+        <progress max="1" value="{{.Progress}}" aria-label="{{.Name}} progress"></progress>
+        <span class="pct">{{percent .Progress}}</span>
+      </div>
+    </li>
+    {{end}}
+  </ul>
+  {{else}}
+  <div class="empty">
+    {{template "i-download"}}
+    <h3>No downloads</h3>
+    <p>Torrents added here or by a followed show appear with their progress.</p>
+  </div>
+  {{end}}
+</section>
+{{end}}
+{{end}}

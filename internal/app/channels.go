@@ -7,6 +7,7 @@ import (
 	"regexp"
 	"slices"
 	"strings"
+	"sync"
 	"time"
 	"unicode/utf8"
 
@@ -100,10 +101,46 @@ func (a *App) Unfollow(id int64) (store.Channel, error) {
 	return c, err
 }
 
-// PreviewRow is a release and whether the pattern takes it.
+// PreviewRow is a release and whether the pattern takes it; Before, Hit and After split
+// the title around the first match.
 type PreviewRow struct {
 	eztv.Release
-	Match bool
+	Match              bool
+	Before, Hit, After string
+}
+
+const releasesTTL = 5 * time.Minute
+
+type releasesCache struct {
+	mu   sync.Mutex
+	byID map[string]cachedReleases
+}
+
+type cachedReleases struct {
+	at       time.Time
+	releases []eztv.Release
+}
+
+// cachedReleases serves repeated previews of one show from memory.
+func (a *App) cachedReleases(ctx context.Context, imdb string) ([]eztv.Release, error) {
+	c := &a.releases
+	c.mu.Lock()
+	hit, ok := c.byID[imdb]
+	c.mu.Unlock()
+	if ok && time.Since(hit.at) < releasesTTL {
+		return hit.releases, nil
+	}
+	releases, err := a.EZTV.Releases(ctx, imdb)
+	if err != nil {
+		return nil, err
+	}
+	c.mu.Lock()
+	if c.byID == nil {
+		c.byID = map[string]cachedReleases{}
+	}
+	c.byID[imdb] = cachedReleases{time.Now(), releases}
+	c.mu.Unlock()
+	return releases, nil
 }
 
 // Preview fetches a show's releases and marks the ones the pattern matches.
@@ -116,14 +153,27 @@ func (a *App) Preview(ctx context.Context, imdb, pattern string, caseSensitive b
 	if err != nil {
 		return nil, err
 	}
-	releases, err := a.EZTV.Releases(ctx, digits)
+	releases, err := a.cachedReleases(ctx, digits)
 	if err != nil {
 		return nil, err
 	}
 	out := make([]PreviewRow, len(releases))
 	for i, r := range releases {
-		out[i] = PreviewRow{r, re.MatchString(r.Title)}
+		out[i] = PreviewRow{Release: r, Before: r.Title}
+		if loc := re.FindStringIndex(r.Title); loc != nil {
+			out[i].Match = true
+			out[i].Before, out[i].Hit, out[i].After = r.Title[:loc[0]], r.Title[loc[0]:loc[1]], r.Title[loc[1]:]
+		}
 	}
+	slices.SortStableFunc(out, func(x, y PreviewRow) int {
+		switch {
+		case x.Match == y.Match:
+			return 0
+		case x.Match:
+			return -1
+		}
+		return 1
+	})
 	return out, nil
 }
 
@@ -142,6 +192,7 @@ func (a *App) Poll(ctx context.Context, only int64, force bool) PollResult {
 		return res
 	}
 	now := time.Now()
+	approvals := map[string]int64{}
 	for _, c := range a.Channels() {
 		if only > 0 && c.ID != only {
 			continue
@@ -171,6 +222,7 @@ func (a *App) Poll(ctx context.Context, only int64, force bool) PollResult {
 					continue
 				}
 				res.Added = append(res.Added, store.Added{Time: now, Channel: c.Name, Title: r.Title, Hash: r.Hash, Size: r.Size})
+				approvals[r.Hash] = c.ID
 				a.Log.Info("added release", "channel", c.Name, "title", r.Title)
 			}
 			marks = append(marks, r.Hash)
@@ -195,6 +247,9 @@ func (a *App) Poll(ctx context.Context, only int64, force bool) PollResult {
 			}
 		}
 		s.Added = append(slices.Clone(res.Added), s.Added...)
+		for h, id := range approvals {
+			s.Approved[h] = store.Approval{Time: now, Channel: id}
+		}
 		if only == 0 {
 			s.Poll = store.PollStatus{LastCheck: now, Errors: res.Errors}
 		}

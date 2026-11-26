@@ -1,5 +1,8 @@
 // Progressive enhancements; every page works without this script.
 
+// Controls replaced by live behaviour (instant filters, live preview).
+for (const el of document.querySelectorAll("[data-js-hide]")) el.hidden = true;
+
 const announcer = document.getElementById("announcer");
 const supportsPopover = Object.hasOwn(HTMLElement.prototype, "popover");
 
@@ -91,7 +94,6 @@ if (player) {
 // Library: live search over the rendered cards; kind and sort submit at once.
 const filterForm = document.querySelector("[data-filter-form]");
 if (filterForm) {
-  filterForm.querySelector("[data-js-hide]")?.setAttribute("hidden", "");
   filterForm.addEventListener("change", (e) => {
     if (e.target.matches('[name="kind"], [name="sort"]')) filterForm.requestSubmit();
   });
@@ -124,5 +126,98 @@ if (review) {
     if ("stale" in review.dataset) return;
     review.dataset.stale = "";
     if (file) file.disabled = true;
+  });
+}
+
+// Copy link: buttons with command="--copy" copy the href (or text) of their commandfor target.
+// The app is served over plain HTTP on a private network, where navigator.clipboard is
+// unavailable, so the textarea fallback is the usual path.
+function legacyCopy(text) {
+  const previousFocus = document.activeElement;
+  const field = Object.assign(document.createElement("textarea"), { value: text });
+  field.setAttribute("readonly", "");
+  field.className = "offscreen";
+  document.body.append(field);
+  field.select();
+  try {
+    return document.execCommand("copy");
+  } finally {
+    field.remove();
+    previousFocus?.focus({ preventScroll: true });
+  }
+}
+
+const copyTimers = new WeakMap();
+let lastCopyMessage = "";
+function reportCopy(button, ok) {
+  const tip = button.nextElementSibling;
+  clearTimeout(copyTimers.get(button));
+  button.removeAttribute("data-copied");
+  button.removeAttribute("data-failed");
+  let message = ok ? "Link copied" : "Copy failed";
+  if (message === lastCopyMessage) message += "\u00A0";
+  lastCopyMessage = message;
+  tip.textContent = "";
+  void button.offsetWidth;
+  button.setAttribute(ok ? "data-copied" : "data-failed", "");
+  requestAnimationFrame(() => { tip.textContent = message; });
+  copyTimers.set(button, setTimeout(() => {
+    button.removeAttribute("data-copied");
+    button.removeAttribute("data-failed");
+    tip.textContent = "";
+  }, 2000));
+}
+
+function copyFrom(button, target) {
+  const text = target instanceof HTMLAnchorElement ? target.href : target.innerText.trim();
+  if (!text) return;
+  // The legacy path must run synchronously inside the click.
+  if (!navigator.clipboard || !window.isSecureContext) {
+    reportCopy(button, legacyCopy(text));
+    return;
+  }
+  navigator.clipboard.writeText(text).then(
+    () => reportCopy(button, true),
+    () => reportCopy(button, legacyCopy(text)),
+  );
+}
+
+if ("CommandEvent" in window) {
+  document.addEventListener("command", (e) => {
+    if (e.command === "--copy") copyFrom(e.source, e.target);
+  }, true);
+} else {
+  document.addEventListener("click", (e) => {
+    if (e.defaultPrevented) return;
+    const button = e.target instanceof Element && e.target.closest('button[command="--copy"]');
+    const target = button && document.getElementById(button.getAttribute("commandfor"));
+    if (target) copyFrom(button, target);
+  });
+}
+
+// Live preview: announce the match count after each swap, not the whole list.
+document.addEventListener("htmx:afterSettle", (e) => {
+  if (e.target.id !== "preview-body") return;
+  const status = document.getElementById("preview-status");
+  if (status) status.textContent = e.target.dataset.summary ?? "";
+});
+
+// Downloads: show the chosen file's name, and keep magnet and file exclusive.
+for (const form of document.querySelectorAll("form.add-torrent")) {
+  const file = form.querySelector('input[type="file"]');
+  const magnet = form.querySelector('input[name="magnet"]');
+  const label = form.querySelector("[data-file-name]");
+  file.addEventListener("change", () => {
+    const name = file.files[0]?.name;
+    label.textContent = name ?? "Choose .torrent";
+    form.toggleAttribute("data-has-file", Boolean(name));
+    if (name) magnet.value = "";
+  });
+  magnet.addEventListener("input", () => {
+    if (magnet.value && file.value) {
+      file.value = "";
+      label.textContent = "Choose .torrent";
+      form.removeAttribute("data-has-file");
+    }
   });
 }

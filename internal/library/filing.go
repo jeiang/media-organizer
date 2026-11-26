@@ -36,6 +36,7 @@ type Receipt struct {
 	Placed   []Placed   `json:"placed"`
 	Dirs     []string   `json:"dirs"` // directories filing created, outermost first
 	UndoneAt *time.Time `json:"undone_at,omitempty"`
+	Auto     bool       `json:"auto,omitempty"` // filed without review
 }
 
 // Execute performs the plan's operations. Every destination is created without replacing

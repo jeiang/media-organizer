@@ -65,7 +65,7 @@
     {{range .Receipts}}
     <li{{if .UndoneAt}} data-undone{{end}}>
       <div class="receipt-text">
-        <p><strong>{{.Title}}</strong>{{with .Year}} <span class="muted">({{.}})</span>{{end}}</p>
+        <p><strong>{{.Title}}</strong>{{with .Year}} <span class="muted">({{.}})</span>{{end}}{{if .Auto}} <span class="badge" data-tone="accent">{{template "i-bolt"}}Auto</span>{{end}}</p>
         <p class="muted small">{{len .Placed}} {{if eq (len .Placed) 1}}file{{else}}files{{end}} · {{if .Torrent}}hardlinked{{else}}moved{{end}} · {{ago .Time}} · <span class="release-inline">{{.Name}}</span></p>
       </div>
       {{if .UndoneAt}}

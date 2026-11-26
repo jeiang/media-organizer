@@ -11,6 +11,7 @@ import (
 	"hash/fnv"
 	"html"
 	"html/template"
+	"io"
 	"io/fs"
 	"log/slog"
 	"mime"
@@ -25,6 +26,7 @@ import (
 
 	"github.com/jeiang/media-organizer/internal/app"
 	"github.com/jeiang/media-organizer/internal/library"
+	"github.com/jeiang/media-organizer/internal/torrent"
 )
 
 //go:embed templates static
@@ -64,8 +66,10 @@ func New(a *app.App, log *slog.Logger) (*Server, error) {
 		"placed":     placed,
 		"pad":        func(n int) string { return fmt.Sprintf("%02d", n) },
 		"interval":   interval,
+		"percent":    func(f float64) string { return fmt.Sprintf("%d%%", int(f*100)) },
+		"eta":        eta,
 	}
-	for _, page := range []string{"library", "entry", "intake", "review", "following", "error"} {
+	for _, page := range []string{"library", "entry", "downloads", "intake", "review", "following", "error"} {
 		t, err := template.New("base.html").Funcs(funcs).ParseFS(files, "templates/base.html", "templates/icons.html", "templates/"+page+".html")
 		if err != nil {
 			return nil, err
@@ -82,6 +86,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /library/{kind}/{dir}", s.entry)
 	mux.HandleFunc("GET /art/{kind}/{dir}/{which}", s.art)
 	mux.HandleFunc("GET /stream/{kind}/{dir}/{rel...}", s.stream)
+	mux.HandleFunc("GET /downloads", s.downloads)
+	mux.HandleFunc("POST /downloads", s.addTorrent)
 	mux.HandleFunc("GET /intake", s.intake)
 	mux.HandleFunc("GET /intake/{id}", s.review)
 	mux.HandleFunc("POST /intake/{id}/file", s.file)
@@ -287,9 +293,9 @@ func placeholder(title string) string {
 	}
 	return fmt.Sprintf(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 300">`+
 		`<defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1">`+
-		`<stop offset="0" stop-color="oklch(0.42 0.06 %[1]d)"/><stop offset="1" stop-color="oklch(0.24 0.04 %[2]d)"/>`+
+		`<stop offset="0" stop-color="oklch(0.36 0.07 %[1]d)"/><stop offset="1" stop-color="oklch(0.16 0.03 %[2]d)"/>`+
 		`</linearGradient></defs><rect width="200" height="300" fill="url(#g)"/>`+
-		`<text x="100" y="172" text-anchor="middle" font-family="Iowan Old Style, Palatino, Georgia, serif" font-size="96" fill="oklch(0.92 0.03 %[1]d)" fill-opacity="0.85">%[3]s</text></svg>`,
+		`<text x="100" y="172" text-anchor="middle" font-family="Inter, SF Pro Display, -apple-system, system-ui, sans-serif" font-weight="800" font-size="104" letter-spacing="-4" fill="oklch(0.95 0.02 %[1]d)" fill-opacity="0.9">%[3]s</text></svg>`,
 		hue, (hue+40)%360, html.EscapeString(initial))
 }
 
@@ -331,6 +337,65 @@ func (s *Server) stream(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Disposition", mime.FormatMediaType("attachment", map[string]string{"filename": path.Base(rel)}))
 	}
 	http.ServeContent(w, r, path.Base(rel), info.ModTime(), f)
+}
+
+// --- downloads ---
+
+type downloadsData struct {
+	Downloads []app.Download
+	Error     string
+	HasQbit   bool
+	Tag       string
+	Active    int
+}
+
+func (s *Server) downloads(w http.ResponseWriter, r *http.Request) {
+	d := downloadsData{HasQbit: s.app.Qbit != nil, Tag: s.app.Cfg.Tag}
+	if d.HasQbit {
+		list, err := s.app.Downloads(r.Context())
+		if err != nil {
+			d.Error = err.Error()
+		}
+		d.Downloads = list
+		for _, x := range list {
+			if x.Progress < 1 {
+				d.Active++
+			}
+		}
+	}
+	s.render(w, r, http.StatusOK, "downloads", page{Title: "Downloads", Nav: "downloads", Data: d})
+}
+
+func (s *Server) addTorrent(w http.ResponseWriter, r *http.Request) {
+	r.Body = http.MaxBytesReader(w, r.Body, torrent.MaxFile+1<<20)
+	if err := r.ParseMultipartForm(torrent.MaxFile + 1<<20); err != nil {
+		s.redirect(w, r, "/downloads", "error", "Not added: the upload could not be read (is the file over 10 MB?).")
+		return
+	}
+	var data []byte
+	var name string
+	if f, h, err := r.FormFile("torrent"); err == nil {
+		defer f.Close()
+		if h.Size > 0 {
+			name = h.Filename
+			if data, err = io.ReadAll(io.LimitReader(f, torrent.MaxFile+1)); err != nil {
+				s.redirect(w, r, "/downloads", "error", "Not added: the file could not be read.")
+				return
+			}
+		}
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
+	defer cancel()
+	m, err := s.app.AddTorrent(ctx, r.FormValue("magnet"), data, name)
+	if err != nil {
+		if m.Hash != "" {
+			s.redirect(w, r, "/downloads", "warn", "Added "+m.Name+", but "+err.Error())
+			return
+		}
+		s.redirect(w, r, "/downloads", "error", "Not added: "+err.Error()+".")
+		return
+	}
+	s.redirect(w, r, "/downloads", "ok", "Added "+m.Name+". It is filed on its own when it finishes, if its name is clear.")
 }
 
 // --- intake ---
@@ -462,20 +527,21 @@ type followForm struct {
 }
 
 type followingData struct {
-	Channels  any
-	Status    any
-	Added     any
-	Interval  time.Duration
-	HasTMDB   bool
-	HasQbit   bool
-	Q         string
-	Hits      []app.ShowHit
-	Picked    *app.ShowHit
-	Form      followForm
-	Previewed bool
-	Preview   []app.PreviewRow
-	Matches   int
-	Error     string
+	Channels     any
+	Status       any
+	Added        any
+	Interval     time.Duration
+	HasTMDB      bool
+	HasQbit      bool
+	Q            string
+	Hits         []app.ShowHit
+	Picked       *app.ShowHit
+	Form         followForm
+	Previewed    bool
+	Preview      []app.PreviewRow
+	Matches      int
+	PreviewError string
+	Error        string
 }
 
 func (s *Server) following(w http.ResponseWriter, r *http.Request) {
@@ -490,7 +556,7 @@ func (s *Server) following(w http.ResponseWriter, r *http.Request) {
 		Form: followForm{Name: q.Get("name"), IMDB: q.Get("imdb"), Pattern: q.Get("pattern"), CaseSensitive: q.Has("cs")},
 	}
 	d.Form.TMDBID, _ = strconv.ParseInt(q.Get("tmdb"), 10, 64)
-	if d.Form.Pattern == "" {
+	if !q.Has("pattern") {
 		d.Form.Pattern = "1080p"
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
@@ -518,7 +584,7 @@ func (s *Server) following(w http.ResponseWriter, r *http.Request) {
 		d.Previewed = true
 		rows, err := s.app.Preview(ctx, d.Form.IMDB, d.Form.Pattern, d.Form.CaseSensitive)
 		if err != nil {
-			errs = append(errs, err.Error())
+			d.PreviewError = err.Error()
 		}
 		d.Preview = rows
 		for _, row := range rows {
@@ -615,6 +681,22 @@ func interval(d time.Duration) string {
 		return fmt.Sprintf("%d min", d/time.Minute)
 	}
 	return d.String()
+}
+
+// eta formats qBittorrent's seconds remaining; it reports 8640000 for unknown.
+func eta(s int64) string {
+	switch d := time.Duration(s) * time.Second; {
+	case s <= 0 || s >= 8640000:
+		return ""
+	case d < time.Minute:
+		return "under a minute"
+	case d < time.Hour:
+		return fmt.Sprintf("%d min", int(d.Minutes()))
+	case d < 48*time.Hour:
+		return fmt.Sprintf("%d h %d min", int(d.Hours()), int(d.Minutes())%60)
+	default:
+		return fmt.Sprintf("%d d", int(d.Hours()/24))
+	}
 }
 
 func ago(t time.Time) string {

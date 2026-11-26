@@ -7,13 +7,19 @@ sends new releases to qBittorrent, and streams the library to the browser.
 - **Library**: poster wall of movies and shows (TMDB artwork when a token is
   set, generated posters otherwise), live search, and a page per title that
   plays files in the browser or downloads them.
+- **Downloads**: add a magnet link or a `.torrent` file (v1 info hash required)
+  and watch progress. Downloads added here or by a followed show are filed on
+  their own when they finish, if the plan is exact: a known title, one video
+  and a year for a movie, and every video numbered for a show the library
+  already has (or with a year). Each is tried once; anything else waits in
+  Intake with the reason, and automatic filings are undone like any other.
 - **Intake**: finished qBittorrent downloads tagged `media`, plus every entry
   in the import folder. Each shows where its files will land; review to fix
   the title, year, kind, or episode numbers, then file. Downloads are
   hardlinked, so they keep seeding; imports are moved. Every filing can be
   undone, and undo refuses when it would delete the only copy of a file.
 - **Following**: follow a show by IMDb ID (or pick it from TMDB search) with a
-  release-name regex. The first check marks existing releases as seen; later
+  release-name regex, previewed live against recent releases as you type. The first check marks existing releases as seen; later
   matches are added to qBittorrent with the `media` tag, and their non-video
   files are skipped.
 
@@ -26,7 +32,8 @@ tv/Show (Year)/Season 01/Show (Year) - S01E01.mkv
 ```
 
 It is one Go binary with no dependencies outside the standard library; pages
-are server-rendered HTML with a little progressive JavaScript. State (followed
+are server-rendered HTML with a little progressive JavaScript and a vendored
+copy of [htmx](https://htmx.org) (2.0.11, 0BSD) for live regions. State (followed
 shows, seen releases, filing receipts) is one JSON file in the state
 directory. There is no login: serve it only on a trusted network.
 

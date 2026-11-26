@@ -19,9 +19,11 @@
     <label class="select">
       <span class="sr-only">Sort by</span>
       <select name="sort">
+        <button><selectedcontent></selectedcontent></button>
         <option value="recent"{{if eq .Sort "recent"}} selected{{end}}>Recently added</option>
-        <option value="title"{{if eq .Sort "title"}} selected{{end}}>Title</option>
+        <option value="title"{{if eq .Sort "title"}} selected{{end}}>Title A–Z</option>
       </select>
+      {{template "i-chevron"}}
     </label>
     <button class="button" type="submit" data-js-hide>Apply</button>
   </form>

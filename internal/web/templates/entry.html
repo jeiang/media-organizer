@@ -19,24 +19,26 @@
       {{with .Meta.Overview}}<p class="overview">{{.}}</p>{{end}}
       {{with index $e.Files 0}}
       <p class="actions">
-        <a class="button primary" href="{{$base}}{{.Rel}}" data-play data-title="{{$e.Title}}{{if .Episode}} · S{{pad .Season}}E{{pad .Episode}}{{end}}">{{template "i-play"}}{{if eq $e.Kind "show"}}Play first episode{{else}}Play{{end}}</a>
+        <a class="button primary" id="play-main" href="{{$base}}{{.Rel}}" data-play data-title="{{$e.Title}}{{if .Episode}} · S{{pad .Season}}E{{pad .Episode}}{{end}}">{{template "i-play"}}{{if eq $e.Kind "show"}}Play first episode{{else}}Play{{end}}</a>
+        <span class="copy"><button type="button" class="button ghost copy-button" command="--copy" commandfor="play-main"><span class="icon-idle">{{template "i-link"}}</span><span class="icon-done">{{template "i-check"}}</span><span>Copy link</span></button><span class="tip" role="status"></span></span>
       </p>
       {{end}}
     </div>
   </header>
 
   {{if eq $e.Kind "show"}}
-    {{range .Seasons}}
-    <section class="season" aria-labelledby="season-{{.Number}}">
-      <h2 id="season-{{.Number}}">{{if .Number}}Season {{.Number}}{{else}}Specials{{end}}</h2>
+    {{range $s := .Seasons}}
+    <section class="season" aria-labelledby="season-{{$s.Number}}">
+      <h2 id="season-{{$s.Number}}">{{if $s.Number}}Season {{$s.Number}}{{else}}Specials{{end}}</h2>
       <ol class="files" role="list">
-        {{range .Files}}
+        {{range $i, $f := $s.Files}}
         <li class="file-row">
           <span class="ep">{{if .Episode}}E{{pad .Episode}}{{else}}—{{end}}</span>
           <span class="file-name">{{.Name}}</span>
           <span class="size">{{bytes .Size}}</span>
           <span class="row-actions">
-            <a class="button quiet" href="{{$base}}{{.Rel}}" data-play data-title="{{$e.Title}} · S{{pad .Season}}E{{pad .Episode}}">{{template "i-play"}}<span>Play<span class="sr-only"> {{.Name}}</span></span></a>
+            <a class="button quiet" id="p{{$s.Number}}-{{$i}}" href="{{$base}}{{.Rel}}" data-play data-title="{{$e.Title}} · S{{pad .Season}}E{{pad .Episode}}">{{template "i-play"}}<span>Play<span class="sr-only"> {{.Name}}</span></span></a>
+            <span class="copy"><button type="button" class="icon-button copy-button" command="--copy" commandfor="p{{$s.Number}}-{{$i}}" aria-label="Copy link to {{.Name}}"><span class="icon-idle">{{template "i-link"}}</span><span class="icon-done">{{template "i-check"}}</span></button><span class="tip" role="status"></span></span>
             <a class="icon-button" href="{{$base}}{{.Rel}}?download" download aria-label="Download {{.Name}}">{{template "i-download"}}</a>
           </span>
         </li>
@@ -48,13 +50,14 @@
     <section class="season" aria-labelledby="files-title">
       <h2 id="files-title">{{if eq (len $e.Files) 1}}File{{else}}Files{{end}}</h2>
       <ol class="files" role="list">
-        {{range $e.Files}}
+        {{range $i, $f := $e.Files}}
         <li class="file-row">
           <span class="ep">{{template "i-film"}}</span>
           <span class="file-name">{{.Rel}}</span>
           <span class="size">{{bytes .Size}}</span>
           <span class="row-actions">
-            <a class="button quiet" href="{{$base}}{{.Rel}}" data-play data-title="{{$e.Title}}">{{template "i-play"}}<span>Play<span class="sr-only"> {{.Rel}}</span></span></a>
+            <a class="button quiet" id="p-{{$i}}" href="{{$base}}{{.Rel}}" data-play data-title="{{$e.Title}}">{{template "i-play"}}<span>Play<span class="sr-only"> {{.Rel}}</span></span></a>
+            <span class="copy"><button type="button" class="icon-button copy-button" command="--copy" commandfor="p-{{$i}}" aria-label="Copy link to {{.Rel}}"><span class="icon-idle">{{template "i-link"}}</span><span class="icon-done">{{template "i-check"}}</span></button><span class="tip" role="status"></span></span>
             <a class="icon-button" href="{{$base}}{{.Rel}}?download" download aria-label="Download {{.Rel}}">{{template "i-download"}}</a>
           </span>
         </li>

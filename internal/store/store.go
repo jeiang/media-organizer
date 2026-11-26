@@ -39,6 +39,15 @@ type Added struct {
 	Size    int64     `json:"size"`
 }
 
+// Approval marks a torrent added from the Downloads page or by a followed show, so a
+// finished download with an exact plan is filed without review.
+type Approval struct {
+	Time    time.Time `json:"time"`
+	Channel int64     `json:"channel,omitempty"` // the followed show that added it; 0 for the Downloads page
+	Tried   bool      `json:"tried,omitempty"`   // automatic filing was attempted; it is never repeated
+	Note    string    `json:"note,omitempty"`    // why it was left in intake
+}
+
 // PollStatus is the outcome of the last full check of every channel.
 type PollStatus struct {
 	LastCheck time.Time `json:"last_check"`
@@ -53,6 +62,7 @@ type State struct {
 	Receipts      []library.Receipt    `json:"receipts"` // newest first
 	Added         []Added              `json:"added"`    // newest first
 	Poll          PollStatus           `json:"poll"`
+	Approved      map[string]Approval  `json:"approved"` // by lowercase info hash
 }
 
 // Store guards State and its file.
@@ -78,6 +88,9 @@ func Open(path string) (*Store, error) {
 	if s.state.Seen == nil {
 		s.state.Seen = map[string]time.Time{}
 	}
+	if s.state.Approved == nil {
+		s.state.Approved = map[string]Approval{}
+	}
 	return s, nil
 }
 
@@ -102,6 +115,9 @@ func (s *Store) Update(fn func(*State) error) error {
 	}
 	if draft.Seen == nil {
 		draft.Seen = map[string]time.Time{}
+	}
+	if draft.Approved == nil {
+		draft.Approved = map[string]Approval{}
 	}
 	if err := fn(&draft); err != nil {
 		return err
