@@ -264,6 +264,7 @@ func (a *App) file(ctx context.Context, id string, edit *library.Edit, auto bool
 	var errs []error
 	if err := a.Store.Update(func(s *store.State) error {
 		s.Receipts = append([]library.Receipt{r}, s.Receipts...)
+		consumeApproval(s, r)
 		return nil
 	}); err != nil {
 		errs = append(errs, fmt.Errorf("the receipt was not saved, so this filing cannot be undone: %w", err))
@@ -330,6 +331,7 @@ func (a *App) Undo(ctx context.Context, id string) (library.Receipt, error) {
 		if i := slices.IndexFunc(s.Receipts, func(x library.Receipt) bool { return x.ID == id }); i >= 0 {
 			s.Receipts[i].UndoneAt = &now
 		}
+		consumeApproval(s, r)
 		return nil
 	})
 	return r, err

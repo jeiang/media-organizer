@@ -135,3 +135,53 @@ func TestRemoveEmptyDirKeepsFiles(t *testing.T) {
 		t.Fatalf("a regular file at a reused import path was removed: %v", err)
 	}
 }
+
+// An approved download that was filed by hand and then undone must stay in intake.
+func TestUndoneManualFilingIsNotRefiled(t *testing.T) {
+	a, _ := setup(t)
+	ctx := context.Background()
+	if err := a.approve(hash, 0); err != nil {
+		t.Fatal(err)
+	}
+	r, err := a.File(ctx, hash, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := a.Undo(ctx, r.ID); err != nil {
+		t.Fatal(err)
+	}
+	if err := a.AutoFile(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if n := len(a.Receipts()); n != 1 {
+		t.Fatalf("%d receipts: the undone filing was filed again", n)
+	}
+	if _, err := os.Stat(r.Placed[0].Dst); err == nil {
+		t.Fatal("the undone filing is back in the library")
+	}
+}
+
+// Automatic filing happens once; after undo the download waits in intake.
+func TestAutoFileOnce(t *testing.T) {
+	a, _ := setup(t)
+	ctx := context.Background()
+	if err := a.approve(hash, 0); err != nil {
+		t.Fatal(err)
+	}
+	if err := a.AutoFile(ctx); err != nil {
+		t.Fatal(err)
+	}
+	rs := a.Receipts()
+	if len(rs) != 1 || !rs[0].Auto {
+		t.Fatalf("receipts %+v, want one automatic filing", rs)
+	}
+	if _, err := a.Undo(ctx, rs[0].ID); err != nil {
+		t.Fatal(err)
+	}
+	if err := a.AutoFile(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if n := len(a.Receipts()); n != 1 {
+		t.Fatalf("%d receipts: an undone automatic filing was repeated", n)
+	}
+}

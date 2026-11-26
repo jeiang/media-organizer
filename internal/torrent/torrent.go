@@ -9,6 +9,7 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
+	"unicode"
 )
 
 // MaxFile is the largest .torrent file accepted.
@@ -25,6 +26,10 @@ func Magnet(link string) (Meta, error) {
 	link = strings.TrimSpace(link)
 	if !strings.HasPrefix(strings.ToLower(link), "magnet:?") {
 		return Meta{}, errors.New("that is not a magnet link")
+	}
+	// qBittorrent reads one link per line, so a line break would smuggle in a second torrent.
+	if strings.ContainsFunc(link, unicode.IsControl) {
+		return Meta{}, errors.New("paste one magnet link, without line breaks")
 	}
 	q, err := url.ParseQuery(link[len("magnet:?"):])
 	if err != nil {

@@ -14,6 +14,8 @@ func TestMagnet(t *testing.T) {
 		{"magnet:?xt=urn:btmh:1220abcd&dn=v2", "", "no v1 info hash"},
 		{"https://example.invalid/a.torrent", "", "not a magnet link"},
 		{"magnet:?xt=urn:btih:nothex", "", "no v1 info hash"},
+		{"magnet:?xt=urn:btih:c9e15763f722f23e98a29decdfae341b98d53056&dn=x\nmagnet:?xt=urn:btih:0000000000000000000000000000000000000001", "", "one magnet link"},
+		{"magnet:?xt=urn:btih:c9e15763f722f23e98a29decdfae341b98d53056\r", "c9e15763f722f23e98a29decdfae341b98d53056", ""},
 	} {
 		m, err := Magnet(tc.link)
 		if tc.err != "" {

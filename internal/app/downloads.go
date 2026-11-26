@@ -171,11 +171,21 @@ func (a *App) AutoFile(ctx context.Context) error {
 			continue
 		}
 		note := a.Exact(a.Plan(a.torrentItem(t), nil))
-		if err := a.Store.Update(func(s *store.State) error {
-			ap.Tried, ap.Note = true, note
-			s.Approved[t.Hash] = ap
+		// Claim the one attempt against the current state: a filing or undo since the
+		// snapshot above has already consumed it.
+		err := a.Store.Update(func(s *store.State) error {
+			cur, ok := s.Approved[t.Hash]
+			if !ok || cur.Tried {
+				return errClaimed
+			}
+			cur.Tried, cur.Note = true, note
+			s.Approved[t.Hash], ap = cur, cur
 			return nil
-		}); err != nil {
+		})
+		if errors.Is(err, errClaimed) {
+			continue
+		}
+		if err != nil {
 			errs = append(errs, err)
 			continue
 		}
@@ -198,6 +208,16 @@ func (a *App) AutoFile(ctx context.Context) error {
 		a.Log.Info("filed automatically", "name", t.Name, "title", r.Title, "files", len(r.Placed))
 	}
 	return errors.Join(errs...)
+}
+
+var errClaimed = errors.New("already tried")
+
+// consumeApproval ends a torrent's automatic eligibility once it is filed or a filing is undone.
+func consumeApproval(s *store.State, r library.Receipt) {
+	if ap, ok := s.Approved[r.Hash]; r.Torrent && ok {
+		ap.Tried = true
+		s.Approved[r.Hash] = ap
+	}
 }
 
 // pruneApprovals drops approvals of torrents missing from qBittorrent for over an hour.
