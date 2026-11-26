@@ -170,47 +170,54 @@ func (a *App) AutoFile(ctx context.Context) error {
 		if !ok || ap.Tried || !waiting(a, t) || (ap.Channel != 0 && !followed[ap.Channel]) {
 			continue
 		}
-		note := a.Exact(a.Plan(a.torrentItem(t), nil))
-		// Claim the one attempt against the current state: a filing or undo since the
-		// snapshot above has already consumed it.
-		err := a.Store.Update(func(s *store.State) error {
-			cur, ok := s.Approved[t.Hash]
-			if !ok || cur.Tried {
-				return errClaimed
-			}
-			cur.Tried, cur.Note = true, note
-			s.Approved[t.Hash], ap = cur, cur
-			return nil
-		})
-		if errors.Is(err, errClaimed) {
-			continue
-		}
-		if err != nil {
-			errs = append(errs, err)
-			continue
-		}
-		if note != "" {
-			a.Log.Info("left in intake", "name", t.Name, "reason", note)
-			continue
-		}
-		r, err := a.file(ctx, t.Hash, nil, true)
-		if err != nil {
+		if err := a.autoFileOne(ctx, t); err != nil {
 			errs = append(errs, fmt.Errorf("%s: %w", t.Name, err))
-			if r.ID == "" {
-				_ = a.Store.Update(func(s *store.State) error {
-					ap.Note = "automatic filing failed: " + err.Error()
-					s.Approved[t.Hash] = ap
-					return nil
-				})
-			}
-			continue
 		}
-		a.Log.Info("filed automatically", "name", t.Name, "title", r.Title, "files", len(r.Placed))
 	}
 	return errors.Join(errs...)
 }
 
 var errClaimed = errors.New("already tried")
+
+// autoFileOne claims a torrent's single attempt and files it under fileMu, so a manual
+// filing or undo can neither interleave with the attempt nor be reversed by it.
+func (a *App) autoFileOne(ctx context.Context, t qbit.Torrent) error {
+	a.fileMu.Lock()
+	defer a.fileMu.Unlock()
+	note := a.Exact(a.Plan(a.torrentItem(t), nil))
+	var ap store.Approval
+	err := a.Store.Update(func(s *store.State) error {
+		cur, ok := s.Approved[t.Hash]
+		if !ok || cur.Tried {
+			return errClaimed
+		}
+		cur.Tried, cur.Note = true, note
+		s.Approved[t.Hash], ap = cur, cur
+		return nil
+	})
+	switch {
+	case errors.Is(err, errClaimed):
+		return nil
+	case err != nil:
+		return err
+	case note != "":
+		a.Log.Info("left in intake", "name", t.Name, "reason", note)
+		return nil
+	}
+	r, err := a.fileLocked(ctx, t.Hash, nil, true)
+	if err != nil {
+		if r.ID == "" {
+			_ = a.Store.Update(func(s *store.State) error {
+				ap.Note = "automatic filing failed: " + err.Error()
+				s.Approved[t.Hash] = ap
+				return nil
+			})
+		}
+		return err
+	}
+	a.Log.Info("filed automatically", "name", t.Name, "title", r.Title, "files", len(r.Placed))
+	return nil
+}
 
 // consumeApproval ends a torrent's automatic eligibility once it is filed or a filing is undone.
 func consumeApproval(s *store.State, r library.Receipt) {

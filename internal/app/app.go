@@ -241,12 +241,13 @@ func (a *App) Plan(item library.Item, edit *library.Edit) library.Plan {
 // File files an item. A returned receipt with an error means the files were placed but a
 // follow-up step failed.
 func (a *App) File(ctx context.Context, id string, edit *library.Edit) (library.Receipt, error) {
-	return a.file(ctx, id, edit, false)
-}
-
-func (a *App) file(ctx context.Context, id string, edit *library.Edit, auto bool) (library.Receipt, error) {
 	a.fileMu.Lock()
 	defer a.fileMu.Unlock()
+	return a.fileLocked(ctx, id, edit, false)
+}
+
+// fileLocked files an item; the caller holds fileMu.
+func (a *App) fileLocked(ctx context.Context, id string, edit *library.Edit, auto bool) (library.Receipt, error) {
 	item, err := a.Item(ctx, id)
 	if err != nil {
 		return library.Receipt{}, err
